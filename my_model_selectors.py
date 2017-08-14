@@ -7,7 +7,6 @@ from hmmlearn.hmm import GaussianHMM
 from sklearn.model_selection import KFold
 from asl_utils import combine_sequences
 
-
 class ModelSelector(object):
     '''
     base class for model selection (strategy design pattern)
@@ -105,4 +104,55 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection using CV
-        raise NotImplementedError
+
+        train_results = []
+        test_results = []
+
+        for temp_n_split in range(self.min_n_components, min(self.max_n_components, len(self.sequences)) + 1):
+
+            split_method = KFold(n_splits=temp_n_split, random_state=self.random_state)
+
+            for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                train_X, train_lengths = combine_sequences(cv_train_idx, self.sequences)
+                test_X, test_lengths = combine_sequences(cv_test_idx, self.sequences)
+
+                # self.X = train_X
+                # self.lengths = train_lengths
+                # self.n_constant = temp_n_split
+
+            try:
+                hmm_model = GaussianHMM(n_components=temp_n_split, covariance_type="diag", n_iter=1000,
+                                        random_state=self.random_state, verbose=False).fit(train_X, train_lengths)
+
+                train_results.append(hmm_model.score(train_X, train_lengths))
+                test_results.append(hmm_model.score(test_X, test_lengths))
+
+                print("\nthis_word:", self.this_word)
+                print("self.sequences:", len(self.sequences))
+                print("temp_n_split:", temp_n_split)
+                print("train sample score (logL)", hmm_model.score(train_X, train_lengths))
+                print("test sample score (logL)", hmm_model.score(test_X, test_lengths))
+
+                if self.verbose:
+                    print("model created for {} with {} states".format(self.this_word, num_states))
+            except:
+                if self.verbose:
+                    print("failure on {} with {} states".format(self.this_word, num_states))
+
+        np_train_results = np.array(train_results)
+        np_test_results = np.array(test_results)
+
+        print("\ntrain_results", train_results)
+        print("np_train_results", np_train_results)
+        print("train_results.argmax()", np_train_results.argmax())
+
+        print("\ntest_results", test_results)
+        print("Np_test_results", np_test_results)
+        print("test_results.argmax()", np_test_results.argmax())
+
+
+        best_num_components = self.n_constant
+        return self.base_model(best_num_components)
+
+        # return "TEST"
+
