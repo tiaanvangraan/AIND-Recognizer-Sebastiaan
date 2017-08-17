@@ -6,6 +6,7 @@ import numpy as np
 from hmmlearn.hmm import GaussianHMM
 from sklearn.model_selection import KFold
 from asl_utils import combine_sequences
+from sklearn.model_selection import train_test_split
 
 class ModelSelector(object):
     '''
@@ -73,11 +74,48 @@ class SelectorBIC(ModelSelector):
 
         :return: GaussianHMM object
         """
+        # TODO implement model selection based on BIC scores
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        train_results = []
+        test_results = []
+        hmm_n_nodes_results = []
+        cv_train_idx, cv_test_idx = train_test_split(self.sequences, test_size=0.33, random_state=self.random_state)
 
+        # print("min(2, len(self.sequences))", min(2, len(self.sequences)))
+        # print("len(self.sequences)", len(self.sequences))
+        # print("self.sequences", self.sequences)
+        # print("cv_train_idx", cv_train_idx)
+        # print("cv_test_idx", cv_test_idx)
+
+        for hmm_n_nodes in range(self.min_n_components, min(self.max_n_components, len(self.sequences)) + 1):
+            hmm_model = GaussianHMM(n_components=hmm_n_nodes, covariance_type="diag", n_iter=1000,
+                                    random_state=self.random_state, verbose=False)
+
+            hmm_model.fit(self.X, self.lengths)
+
+            L = hmm_model.score(self.X, self.lengths)
+
+            # transition_count = (2 * hmm_n_nodes)
+            # mean_var_count = (2 * len(self.X[0])) * hmm_n_nodes
+            # p = transition_count + mean_var_count
+
+            p = (hmm_model.n_components**2) + (2 * hmm_model.n_features * (hmm_model.n_components - 1))
+            N = len(self.lengths) * hmm_model.n_components
+
+            train_results.append((-2 * L) + (p * math.log(N)))
+            test_results.append((-2 * L) + (p * math.log(N)))
+
+            # print("\nthis_word:", self.this_word)
+            # print("self.sequences:", len(self.sequences))
+            # print("hmm_n_nodes:", hmm_n_nodes)
+            # print("train_results mean", np.mean(np_train_results))
+            # print("test_results mean", np.mean(np_test_results))
+
+        np_hmm_n_nodes_results = np.array(test_results)
+        best_num_components = self.min_n_components + np_hmm_n_nodes_results.argmin()
+
+        return self.base_model(best_num_components)
 
 class SelectorDIC(ModelSelector):
     ''' select best model based on Discriminative Information Criterion
@@ -115,6 +153,8 @@ class SelectorCV(ModelSelector):
                                     random_state=self.random_state, verbose=False)
 
             for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                # print("self.sequences", self.sequences)
+                # print("cv_train_idx", cv_train_idx)
                 train_X, train_lengths = combine_sequences(cv_train_idx, self.sequences)
                 test_X, test_lengths = combine_sequences(cv_test_idx, self.sequences)
 
