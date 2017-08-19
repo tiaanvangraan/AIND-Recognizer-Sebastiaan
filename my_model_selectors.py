@@ -178,7 +178,6 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         try:
-
             split_method = KFold(n_splits=min(3, len(self.sequences)), random_state=self.random_state)
             hmm_n_nodes_results = []
             hmm_n_nodes = self.min_n_components
