@@ -76,30 +76,43 @@ class SelectorBIC(ModelSelector):
         """
         # TODO implement model selection based on BIC scores
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-        train_results = []
-        test_results = []
 
-        for hmm_n_nodes in range(self.min_n_components, min(self.max_n_components, len(self.sequences)) + 1):
-        # for hmm_n_nodes in range(self.min_n_components, self.max_n_components + 1):
-            hmm_model = GaussianHMM(n_components=hmm_n_nodes, covariance_type="diag", n_iter=1000,
-                                    random_state=self.random_state, verbose=False)
+        try:
+            train_results = []
+            test_results = []
+            hmm_n_nodes = self.min_n_components
 
-            hmm_model.fit(self.X, self.lengths)
+            # for hmm_n_nodes in range(self.min_n_components, min(self.max_n_components, len(self.sequences)) + 1):
+            while (hmm_n_nodes >= self.min_n_components) and (hmm_n_nodes <= min(self.max_n_components, len(self.sequences))):
+                hmm_model = GaussianHMM(n_components=hmm_n_nodes, covariance_type="diag", n_iter=1000,
+                                        random_state=self.random_state, verbose=False)
 
-            L = hmm_model.score(self.X, self.lengths)  # Log likelihood of fitted model
-            N = len(self.X)  # Number of data points
-            d = len(self.X[0])  # Number of features
-            n = hmm_n_nodes  # Number of HMM states
-            p = n*(n-1) + (n-1) + (2*d*n)  # Number of parameters
+                hmm_model.fit(self.X, self.lengths)
 
-            train_results.append((-2*L) + (p*math.log(N)))
-            test_results.append((-2*L) + (p*math.log(N)))
+                L = hmm_model.score(self.X, self.lengths)  # Log likelihood of fitted model
+                N = len(self.X)  # Number of data points
+                d = len(self.X[0])  # Number of features
+                n = hmm_n_nodes  # Number of HMM states
+                p = n*(n-1) + (n-1) + (2*d*n)  # Number of parameters
 
-        np_hmm_n_nodes_results = np.array(test_results)
-        best_num_components = self.min_n_components + np_hmm_n_nodes_results.argmin()
+                train_results.append((-2*L) + (p*math.log(N)))
+                test_results.append((-2*L) + (p*math.log(N)))
+                hmm_n_nodes += 1
 
-        return self.base_model(best_num_components)
+            np_hmm_n_nodes_results = np.array(test_results)
+            best_num_components = self.min_n_components + np_hmm_n_nodes_results.argmin()
 
+            return self.base_model(best_num_components)
+
+        except:
+            print("\nSelectorBIC Exception Raised")
+            print("############################")
+            print("this_word:", self.this_word)
+            print("len(self.sequences)", len(self.sequences))
+            print("min_n_components:", self.min_n_components)
+            print("max_n_components", self.max_n_components)
+            print()
+            return None
 
 class SelectorDIC(ModelSelector):
     ''' select best model based on Discriminative Information Criterion
@@ -113,62 +126,45 @@ class SelectorDIC(ModelSelector):
     def select(self):
         # TODO implement model selection based on DIC scores
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-        train_results = []
-        test_results = []
 
-        # print("\nthis_word:", self.this_word)
-        # print("hmm_n_nodes_MIN:", self.min_n_components)
-        # print("hmm_n_nodes_MAX:", min(self.max_n_components, len(self.sequences)) + 1)
-        # print("len(self.sequences)", len(self.sequences))
-        # print("hmm_n_nodes_CURR:", hmm_n_nodes)
+        try:
+            train_results = []
+            test_results = []
+            hmm_n_nodes = self.min_n_components
 
-        hmm_n_nodes = self.min_n_components
+            while (hmm_n_nodes >= self.min_n_components) and (hmm_n_nodes <= min(self.max_n_components, len(self.sequences))):
+                LPxii = []
 
-        while (hmm_n_nodes >= self.min_n_components) and (hmm_n_nodes <= min(self.max_n_components, len(self.sequences))+1):
+                hmm_model = GaussianHMM(n_components=hmm_n_nodes, covariance_type="diag", n_iter=1000,
+                                        random_state=self.random_state, verbose=False)
 
-            LPxii = []
+                hmm_model.fit(self.X, self.lengths)
+                LPxi = hmm_model.score(self.X, self.lengths)  # Log likelihood of fitted model
+                M = len(self.words.keys())
 
-            hmm_model = GaussianHMM(n_components=hmm_n_nodes, covariance_type="diag", n_iter=1000,
-                                    random_state=self.random_state, verbose=False)
+                for key in self.words.keys():
+                    if key != self.this_word:
+                        key_X, key_lengths = self.hwords[key]
+                        LPxii.append(hmm_model.score(key_X, key_lengths))
 
-            hmm_model.fit(self.X, self.lengths)
+                np_LPxii = np.array(LPxii)
+                train_results.append(LPxi - (1 / ((M-1)*np_LPxii.sum())))
+                hmm_n_nodes += 1
 
+            np_train_results = np.array(train_results)
+            best_num_components = self.min_n_components + np_train_results.argmax()
 
+            return self.base_model(best_num_components)
 
-            # print("hmm_model.score(self.X, self.lengths)", hmm_model.score(self.X, self.lengths))
-            # print("np.log(hmm_model.score(self.X, self.lengths))", math.log(hmm_model.score(self.X, self.lengths)))
-
-            LPxi = hmm_model.score(self.X, self.lengths)  # Log likelihood of fitted model
-            M = len(self.words.keys())
-
-            for key in self.words.keys():
-                if key != self.this_word:
-                    key_X, key_lengths = self.hwords[key]
-                    # print("key_X", key_X)
-                    # print("key_lengths", key_lengths)
-                    # print("hmm_model.score(key_X, key_lengths)", hmm_model.score(key_X, key_lengths))
-                    LPxii.append(hmm_model.score(key_X, key_lengths))
-
-            # print("\n")
-            # print("LPxii", LPxii)
-            np_LPxii = np.array(LPxii)
-            # print("np_LPxii", np_LPxii)
-            # print("LPxi - (1 / ((M-1)*np_LPxii.sum()))", LPxi - (1 / ((M-1)*np_LPxii.sum())))
-            train_results.append(LPxi - (1 / ((M-1)*np_LPxii.sum())))
-
-            # print("LPxi", LPxi)
-            # print("DIC", LPxi - (1 / ((M-1)*np_LPxii.sum())))
-
-            hmm_n_nodes += 1
-
-        np_train_results = np.array(train_results)
-
-        # print("len(train_results)", len(train_results))
-        # print("len(np_train_results)", len(np_train_results))
-
-        best_num_components = self.min_n_components + np_train_results.argmax()
-
-        return self.base_model(best_num_components)
+        except:
+            print("\nSelectorDIC Exception Raised")
+            print("###########################")
+            print("this_word:", self.this_word)
+            print("len(self.sequences)", len(self.sequences))
+            print("min_n_components:", self.min_n_components)
+            print("max_n_components", self.max_n_components)
+            print()
+            return None
 
 
 class SelectorCV(ModelSelector):
@@ -181,37 +177,45 @@ class SelectorCV(ModelSelector):
         # TODO implement model selection using CV
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        split_method = KFold(n_splits=min(3, len(self.sequences)), random_state=self.random_state)
-        hmm_n_nodes_results = []
+        try:
 
-        for hmm_n_nodes in range(self.min_n_components, min(self.max_n_components, len(self.sequences)) + 1):
-            train_results = []
-            test_results = []
-            hmm_model = GaussianHMM(n_components=hmm_n_nodes, covariance_type="diag", n_iter=1000,
-                                    random_state=self.random_state, verbose=False)
+            split_method = KFold(n_splits=min(3, len(self.sequences)), random_state=self.random_state)
+            hmm_n_nodes_results = []
+            hmm_n_nodes = self.min_n_components
 
-            for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
-                # print("self.sequences", self.sequences)
-                # print("cv_train_idx", cv_train_idx)
-                train_X, train_lengths = combine_sequences(cv_train_idx, self.sequences)
-                test_X, test_lengths = combine_sequences(cv_test_idx, self.sequences)
+            # for hmm_n_nodes in range(self.min_n_components, min(self.max_n_components, len(self.sequences)) + 1):
+            while (hmm_n_nodes >= self.min_n_components) and (hmm_n_nodes <= min(self.max_n_components, len(self.sequences))):
+                train_results = []
+                test_results = []
+                hmm_model = GaussianHMM(n_components=hmm_n_nodes, covariance_type="diag", n_iter=1000,
+                                        random_state=self.random_state, verbose=False)
 
-                hmm_model.fit(train_X, train_lengths)
-                train_results.append(hmm_model.score(train_X, train_lengths))
-                test_results.append(hmm_model.score(test_X, test_lengths))
+                for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                    train_X, train_lengths = combine_sequences(cv_train_idx, self.sequences)
+                    test_X, test_lengths = combine_sequences(cv_test_idx, self.sequences)
 
-            np_train_results = np.array(train_results)
-            np_test_results = np.array(test_results)
-            hmm_n_nodes_results.append(np.mean(np_test_results))
+                    hmm_model.fit(train_X, train_lengths)
+                    train_results.append(hmm_model.score(train_X, train_lengths))
+                    test_results.append(hmm_model.score(test_X, test_lengths))
 
-            # print("\nthis_word:", self.this_word)
-            # print("self.sequences:", len(self.sequences))
-            # print("hmm_n_nodes:", hmm_n_nodes)
-            # print("train_results mean", np.mean(np_train_results))
-            # print("test_results mean", np.mean(np_test_results))
+                np_train_results = np.array(train_results)
+                np_test_results = np.array(test_results)
+                hmm_n_nodes_results.append(np.mean(np_test_results))
+                hmm_n_nodes += 1
 
-        np_hmm_n_nodes_results = np.array(hmm_n_nodes_results)
-        best_num_components = self.min_n_components + np_hmm_n_nodes_results.argmax()
+            np_hmm_n_nodes_results = np.array(hmm_n_nodes_results)
+            best_num_components = self.min_n_components + np_hmm_n_nodes_results.argmax()
 
-        return self.base_model(best_num_components)
+            return self.base_model(best_num_components)
+
+        except:
+            print("\nSelectorCV Exception Raised")
+            print("###########################")
+            print("this_word:", self.this_word)
+            print("len(self.sequences)", len(self.sequences))
+            print("min_n_components:", self.min_n_components)
+            print("max_n_components", self.max_n_components)
+            print()
+            return None
+
 
