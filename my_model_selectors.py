@@ -80,12 +80,13 @@ class SelectorBIC(ModelSelector):
         test_results = []
 
         for hmm_n_nodes in range(self.min_n_components, min(self.max_n_components, len(self.sequences)) + 1):
+        # for hmm_n_nodes in range(self.min_n_components, self.max_n_components + 1):
             hmm_model = GaussianHMM(n_components=hmm_n_nodes, covariance_type="diag", n_iter=1000,
                                     random_state=self.random_state, verbose=False)
 
             hmm_model.fit(self.X, self.lengths)
 
-            L = hmm_model.score(self.X, self.lengths)  # Likelihood of fitted model
+            L = hmm_model.score(self.X, self.lengths)  # Log likelihood of fitted model
             N = len(self.X)  # Number of data points
             d = len(self.X[0])  # Number of features
             n = hmm_n_nodes  # Number of HMM states
@@ -110,10 +111,64 @@ class SelectorDIC(ModelSelector):
     '''
 
     def select(self):
-        warnings.filterwarnings("ignore", category=DeprecationWarning)
-
         # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        train_results = []
+        test_results = []
+
+        # print("\nthis_word:", self.this_word)
+        # print("hmm_n_nodes_MIN:", self.min_n_components)
+        # print("hmm_n_nodes_MAX:", min(self.max_n_components, len(self.sequences)) + 1)
+        # print("len(self.sequences)", len(self.sequences))
+        # print("hmm_n_nodes_CURR:", hmm_n_nodes)
+
+        hmm_n_nodes = self.min_n_components
+
+        while (hmm_n_nodes >= self.min_n_components) and (hmm_n_nodes <= min(self.max_n_components, len(self.sequences))+1):
+
+            LPxii = []
+
+            hmm_model = GaussianHMM(n_components=hmm_n_nodes, covariance_type="diag", n_iter=1000,
+                                    random_state=self.random_state, verbose=False)
+
+            hmm_model.fit(self.X, self.lengths)
+
+
+
+            # print("hmm_model.score(self.X, self.lengths)", hmm_model.score(self.X, self.lengths))
+            # print("np.log(hmm_model.score(self.X, self.lengths))", math.log(hmm_model.score(self.X, self.lengths)))
+
+            LPxi = hmm_model.score(self.X, self.lengths)  # Log likelihood of fitted model
+            M = len(self.words.keys())
+
+            for key in self.words.keys():
+                if key != self.this_word:
+                    key_X, key_lengths = self.hwords[key]
+                    # print("key_X", key_X)
+                    # print("key_lengths", key_lengths)
+                    # print("hmm_model.score(key_X, key_lengths)", hmm_model.score(key_X, key_lengths))
+                    LPxii.append(hmm_model.score(key_X, key_lengths))
+
+            # print("\n")
+            # print("LPxii", LPxii)
+            np_LPxii = np.array(LPxii)
+            # print("np_LPxii", np_LPxii)
+            # print("LPxi - (1 / ((M-1)*np_LPxii.sum()))", LPxi - (1 / ((M-1)*np_LPxii.sum())))
+            train_results.append(LPxi - (1 / ((M-1)*np_LPxii.sum())))
+
+            # print("LPxi", LPxi)
+            # print("DIC", LPxi - (1 / ((M-1)*np_LPxii.sum())))
+
+            hmm_n_nodes += 1
+
+        np_train_results = np.array(train_results)
+
+        # print("len(train_results)", len(train_results))
+        # print("len(np_train_results)", len(np_train_results))
+
+        best_num_components = self.min_n_components + np_train_results.argmax()
+
+        return self.base_model(best_num_components)
 
 
 class SelectorCV(ModelSelector):
